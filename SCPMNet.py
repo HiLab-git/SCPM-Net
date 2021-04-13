@@ -4,10 +4,6 @@ import torch.nn.functional as F
 import numpy as np
 
 
-BN = True
-Attention = True
-
-
 def Conv_Block(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
     return nn.Sequential(nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride,
@@ -22,13 +18,10 @@ def conv3x3x3(in_planes, out_planes, stride=1):
                      padding=1, bias=False)
 
 
-class Normal(nn.Module):
+class Norm(nn.Module):
     def __init__(self, N):
-        super(Normal, self).__init__()
-        if BN:
-            self.normal = nn.BatchNorm3d(N)
-        else:
-            pass
+        super(Norm, self).__init__()
+        self.normal = nn.BatchNorm3d(N)
 
     def forward(self, x):
         return self.normal(x)
@@ -40,10 +33,10 @@ class BasicBlock(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3x3(inplanes, planes, stride)
-        self.bn1 = Normal(planes)
+        self.bn1 = Norm(planes)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3x3(planes, planes)
-        self.bn2 = Normal(planes)
+        self.bn2 = Norm(planes)
         self.downsample = downsample
         self.stride = stride
 
@@ -72,12 +65,12 @@ class Bottleneck(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv3d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1 = Normal(planes)
+        self.bn1 = Norm(planes)
         self.conv2 = nn.Conv3d(planes, planes, kernel_size=3, stride=stride,
                                padding=1, bias=False)
-        self.bn2 = Normal(planes)
+        self.bn2 = Norm(planes)
         self.conv3 = nn.Conv3d(planes, planes * 4, kernel_size=1, bias=False)
-        self.bn3 = Normal(planes * 4)
+        self.bn3 = Norm(planes * 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
@@ -205,10 +198,10 @@ class SCPMNet(nn.Module):
         super(SCPMNet, self).__init__()
         self.conv1 = nn.Conv3d(1, 32, kernel_size=3,
                                stride=1, padding=1, bias=False)
-        self.bn1 = Normal(32)
+        self.bn1 = Norm(32)
         self.conv2 = nn.Conv3d(32, 32, kernel_size=3,
                                stride=1, padding=1, bias=False)
-        self.bn2 = Normal(32)
+        self.bn2 = Norm(32)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 32, layers[0])
@@ -226,9 +219,9 @@ class SCPMNet(nn.Module):
         self.conv_8x = Conv_Block(64, 64)
         self.conv_4x = Conv_Block(64, 64)
         self.conv_2x = Conv_Block(64, 64)
-        self.conv_s = nn.Conv3d(64, 1, kernel_size=1, stride=1)
-        self.conv_r = nn.Conv3d(64, 1, kernel_size=1, stride=1)
-        self.conv_o = nn.Conv3d(64, 3, kernel_size=1, stride=1)
+        self.convc = nn.Conv3d(64, 1, kernel_size=1, stride=1)
+        self.convr = nn.Conv3d(64, 1, kernel_size=1, stride=1)
+        self.convo = nn.Conv3d(64, 3, kernel_size=1, stride=1)
         if block == BasicBlock:
             fpn_sizes = [self.layer1[layers[0]-1].conv2.out_channels, self.layer2[layers[1]-1].conv2.out_channels,
                          self.layer3[layers[2]-1].conv2.out_channels, self.layer4[layers[3]-1].conv2.out_channels]
@@ -250,7 +243,7 @@ class SCPMNet(nn.Module):
             downsample = nn.Sequential(
                 nn.Conv3d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
-                Normal(planes * block.expansion),
+                Norm(planes * block.expansion),
             )
 
         layers = []
@@ -269,51 +262,46 @@ class SCPMNet(nn.Module):
         x = self.bn2(x)
         x = self.relu(x)
         x = self.maxpool(x)
-        if Attention:
-            x = self.atttion1(x)
+        x = self.atttion1(x)
         x1 = self.layer1(x)
-        if Attention:
-            x1 = self.atttion2(x1)
+        x1 = self.atttion2(x1)
         x2 = self.layer2(x1)
-        if Attention:
-            x2 = self.atttion3(x2)
+        x2 = self.atttion3(x2)
         x3 = self.layer3(x2)
-        if Attention:
-            x3 = self.atttion4(x3)
+        x3 = self.atttion4(x3)
         x4 = self.layer4(x3)
-        features = self.fpn([x1, x2, x3, x4])
-        features[0] = torch.cat([features[0], coord_2], 1)
-        features[0] = self.conv_1(features[0])
-        features[1] = torch.cat([features[1], coord_4], 1)
-        features[1] = self.conv_2(features[1])
-        features[2] = torch.cat([features[2], coord_8], 1)
-        features[2] = self.conv_3(features[2])
-        features[3] = torch.cat([features[3], coord_16], 1)
-        features[3] = self.conv_4(features[3])
+        feats = self.fpn([x1, x2, x3, x4])
+        feats[0] = torch.cat([feats[0], coord_2], 1)
+        feats[0] = self.conv_1(feats[0])
+        feats[1] = torch.cat([feats[1], coord_4], 1)
+        feats[1] = self.conv_2(feats[1])
+        feats[2] = torch.cat([feats[2], coord_8], 1)
+        feats[2] = self.conv_3(feats[2])
+        feats[3] = torch.cat([feats[3], coord_16], 1)
+        feats[3] = self.conv_4(feats[3])
 
-        features_8x = F.upsample(
-            features[3], scale_factor=2, mode='nearest') + features[2]
-        features_8x = self.conv_8x(features_8x)
-        features_4x = F.upsample(
-            features_8x, scale_factor=2, mode='nearest') + features[1]
-        features_4x = self.conv_4x(features_4x)
-        features_2x = F.upsample(features_4x, scale_factor=2, mode='nearest')
-        features_2x = self.conv_2x(features_2x)
-        Seg1 = self.conv_s(features[0])
-        Seg2 = self.conv_s(features_2x)
-        Reg1 = self.conv_r(features[0])
-        Reg2 = self.conv_r(features_2x)
-        Offset1 = self.conv_o(features[0])
-        Offset2 = self.conv_o(features_2x)
-        dict1 = {}
-        dict1['Seg'] = Seg1
-        dict1['Reg'] = Reg1
-        dict1['Offset'] = Offset1
-        dict2 = {}
-        dict2['Seg'] = Seg2
-        dict2['Reg'] = Reg2
-        dict2['Offset'] = Offset2
-        return dict1, dict2
+        feat_8x = F.upsample(
+            feats[3], scale_factor=2, mode='nearest') + feats[2]
+        feat_8x = self.conv_8x(feat_8x)
+        feat_4x = F.upsample(
+            feat_8x, scale_factor=2, mode='nearest') + feats[1]
+        feat_4x = self.conv_4x(feat_4x)
+        feat_2x = F.upsample(feat_4x, scale_factor=2, mode='nearest')
+        feat_2x = self.conv_2x(feat_2x)
+        Cls1 = self.convc(feats[0])
+        Cls2 = self.convc(feat_2x)
+        Reg1 = self.convr(feats[0])
+        Reg2 = self.convr(feat_2x)
+        Off1 = self.convo(feats[0])
+        Off2 = self.convo(feat_2x)
+        output = {}
+        output['Cls1'] = Cls1
+        output['Reg1'] = Reg1
+        output['Off1'] = Off1
+        output['Cls2'] = Cls2
+        output['Reg2'] = Reg2
+        output['Off2'] = Off2
+        return output
 
 
 def scpmnet18(**kwargs):

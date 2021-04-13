@@ -5,7 +5,7 @@ import numpy as np
 
 
 def Conv_Block(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
+    """3x3x3 convolution with batchnorm and relu"""
     return nn.Sequential(nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride,
                                    padding=1, bias=False),
                          nn.BatchNorm3d(out_planes),
@@ -13,7 +13,7 @@ def Conv_Block(in_planes, out_planes, stride=1):
 
 
 def conv3x3x3(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
+    """3x3x3 convolution with padding"""
     return nn.Conv3d(in_planes, out_planes, kernel_size=3, stride=stride,
                      padding=1, bias=False)
 
@@ -120,9 +120,9 @@ class SAC(nn.Module):
         return feat
 
 
-class PyramidFeatures_3D(nn.Module):
+class Pyramid_3D(nn.Module):
     def __init__(self, C2_size, C3_size, C4_size, C5_size, feature_size=256, using_sac=False):
-        super(PyramidFeatures_3D, self).__init__()
+        super(Pyramid_3D, self).__init__()
 
         self.P5_1 = nn.Conv3d(C5_size, feature_size,
                               kernel_size=1, stride=1, padding=0)
@@ -229,7 +229,7 @@ class SCPMNet(nn.Module):
             fpn_sizes = [self.layer1[layers[0]-1].conv3.out_channels, self.layer2[layers[1]-1].conv3.out_channels,
                          self.layer3[layers[2]-1].conv3.out_channels, self.layer4[layers[3]-1].conv3.out_channels]
 
-        self.fpn = PyramidFeatures_3D(
+        self.fpn = Pyramid_3D(
             fpn_sizes[0], fpn_sizes[1], fpn_sizes[2], fpn_sizes[3], feature_size=64)  # 256
 
         for m in self.modules():
@@ -254,7 +254,7 @@ class SCPMNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x, coord_2, coord_4, coord_8, coord_16):
+    def forward(self, x, c_2, c_4, c_8, c_16):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -271,13 +271,13 @@ class SCPMNet(nn.Module):
         x3 = self.atttion4(x3)
         x4 = self.layer4(x3)
         feats = self.fpn([x1, x2, x3, x4])
-        feats[0] = torch.cat([feats[0], coord_2], 1)
+        feats[0] = torch.cat([feats[0], c_2], 1)
         feats[0] = self.conv_1(feats[0])
-        feats[1] = torch.cat([feats[1], coord_4], 1)
+        feats[1] = torch.cat([feats[1], c_4], 1)
         feats[1] = self.conv_2(feats[1])
-        feats[2] = torch.cat([feats[2], coord_8], 1)
+        feats[2] = torch.cat([feats[2], c_8], 1)
         feats[2] = self.conv_3(feats[2])
-        feats[3] = torch.cat([feats[3], coord_16], 1)
+        feats[3] = torch.cat([feats[3], c_16], 1)
         feats[3] = self.conv_4(feats[3])
 
         feat_8x = F.upsample(
@@ -305,7 +305,7 @@ class SCPMNet(nn.Module):
 
 
 def scpmnet18(**kwargs):
-    """Constructs a ResNet-18 as backbone for scpmnet model.
+    """Using ResNet-18 as backbone for SCPMNet.
     """
     model = SCPMNet(BasicBlock, [2, 2, 3, 3], **kwargs)  # [2,2,2,2]
     return model

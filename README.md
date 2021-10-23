@@ -19,4 +19,4 @@ If you find it's useful for your research, please consider to cite the following
       year={2021}
     }
     
-Any questions please contact **[Xiangde](https://luoxd1996.github.io)**
+Any questions please contact **[Xiangde](https://luoxd1996.github.io)**.
